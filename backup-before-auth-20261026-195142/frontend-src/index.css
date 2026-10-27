@@ -1,0 +1,9 @@
+﻿:root {
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+html { min-width: 360px; min-height: 100%; }
+body { min-width: 360px; min-height: 100vh; }
+#root { min-height: 100vh; }
