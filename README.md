@@ -1,91 +1,83 @@
-﻿# Insurance Management System
+نظام إدارة التأمين (Insurance Management System) 🛡️
+سيستم Full-Stack متكامل لإدارة التأمين والعملاء، متصمم بأسلوب عصري وأداء قوي عشان ينجز معاك في العمليات اليومية.
 
-A full-stack insurance management application built with React, TypeScript, Node.js, Express, and Microsoft SQL Server.
+💡 فكرة المشروع والتقنيات المستخدمة
+المشروع مبني بمعمارية حديثة عشان يضمن السرعة والأمان وسهولة التعديل:
+React & TypeScript (عشان الواجهة تكون سريعة ومظبوطة بدون أخطاء Type)
+Node.js & Express (عشان الـ Backend والـ APIs تكون خفيفة ومستقرة)
+Microsoft SQL Server (عشان قواعد البيانات وتخزين البيانات الضخمة بأمان)
 
-## Requirements
+🛠️ المتطلبات قبل ما تبدأ (Requirements)
+عشان تشغل السيستم عندك على الجهاز محتاج تجهز الحاجات دي:
+Node.js & npm مثبتين عندك.
+Microsoft SQL Server شغال ومضبوط.
+تعريف ODBC Driver 18 for SQL Server.
+تظبيط Windows Authentication للاتصال بقاعدة البيانات.
 
-- Node.js and npm
-- Microsoft SQL Server
-- ODBC Driver 18 for SQL Server
-- Windows authentication configured for the database
+📂 تقسيم أجزاء المشروع (Project Structure)
+backend/ 👈 الـ API، الصلاحيات (Auth/Authorization)، والربط مع قاعدة البيانات.
+frontend/ 👈 واجهة المستخدم الفرونت إند بـ React.
+database/ 👈 السكريبتات والـ Migrations الخاصة بقاعدة البيانات.
 
-## Project Structure
+⚙️ التجهيز وإعدادات البيئة (Configuration)
+هتعمل ملفات الـ Environment المحلية من النسخ النموذجية:
+خد نسخة من backend/.env.example وسميها backend/.env
+خد نسخة من frontend/.env.example وسميها frontend/.env
+في ملف backend/.env اكتب اسم الـ SQL Server Instance واسم قاعدة البيانات، وتأكد إن البورت مضبوط على 3001.
+في ملف الـ الفرونت إند اضبط رابط الـ API كالتالي:
+```env
+VITE_API_URL=http://localhost:3001/api
+```
 
-- `backend/` - API, authentication, authorization, and database integration
-- `frontend/` - React user interface
-- `database/` - Database scripts and migrations
+⚠️ تنبيه: أوعى ترفع ملفات الـ .env أو بيانات الدخول الحقيقية على Git!
 
-## Configuration
-
-Create local environment files from the examples:
-
-- Copy `backend/.env.example` to `backend/.env`
-- Copy `frontend/.env.example` to `frontend/.env`
-
-Configure `backend/.env` with the SQL Server instance name and database name. Ensure the insurance API uses port `3001`.
-
-The frontend API URL should be:
-
-`VITE_API_URL=http://localhost:3001/api`
-
-Do not commit environment files or credentials.
-
-## Run Locally
-
-Open two separate PowerShell terminals.
-
-### 1. Backend
-
+🚀 طريقة التشغيل على جهازك (Run Locally)
+افتح نافذتين PowerShell منفصلين ونفذ الخطوات دي:
+1️⃣ الـ Backend
 ```powershell
 Set-Location "H:\S-Software Engineer\Test_Project\FAHD_1\backend"
 npm install
 npm run dev
 ```
 
-### 2. Frontend
-
+2️⃣ الـ Frontend
 ```powershell
 Set-Location "H:\S-Software Engineer\Test_Project\FAHD_1\frontend"
 npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite, usually `http://localhost:5173`.
+افتح اللينك اللي هيطلعلك من Vite في المتصفح، وعادة بيكون: http://localhost:5173
 
-## Verification
-
-Run backend checks from the `backend` directory:
-
+🧪 الاختبارات والتأكد من الكود (Verification)
+عشان تتأكد إن كل حاجة شغال تمام ومن غير أخطاء:
+من فولدر الـ backend تشغل:
 ```powershell
 npm test
 npm run typecheck
 npm run build
 ```
 
-Run frontend checks from the `frontend` directory:
-
+من فولدر الـ frontend تشغل:
 ```powershell
 npm test
 npm run lint
 npm run build
 ```
 
-## API Health Check
 
-With the backend running, visit:
+🩺 فحص حالة الـ API (Health Check)
+والـ Backend شغال، تقدر تفتح اللينك ده من المتصفح لتأكيد إن الـ API شغال وبخير: http://localhost:3001/api/health
 
-`http://localhost:3001/api/health`
+🔒 الأمان وحماية البيانات (Security)
+الصلاحيات والتحقق (Authorization) بتم بالكامل من ناحية الـ Backend.
+السيستم بيعتمد على الـ Session Cookies والحماية من هجمات CSRF.
+راجع الـ Database Migrations كويس قبل ما تطبقها على داتا حقيقية.
+خد دايماً Backup (نسخة احتياطية) للبيانات المهمة قبل أي تعديل على الداتابيز.
 
-## Security and Data Safety
+🔌 المنافذ المستخدمة (Service Ports)
+Insurance API: Port 3001
+Frontend Dev Server: Port 5173
+Attendance Service: Port 3000 (خدمة منفصلة ملهاش دعوة بالمشروع ده ومبتتعدلش)
 
-- Authorization is enforced by the backend.
-- The application uses session cookies and CSRF protection.
-- Keep real credentials and local `.env` files private.
-- Review database migrations before executing them against any database containing real data.
-- Back up important data before approved database changes.
-
-## Service Ports
-
-- Insurance API: `3001`
-- Frontend development server: `5173`
-- Attendance service: `3000` (separate service; do not modify as part of this project)
+❤️ تم التطوير بواسطة Techno Science
