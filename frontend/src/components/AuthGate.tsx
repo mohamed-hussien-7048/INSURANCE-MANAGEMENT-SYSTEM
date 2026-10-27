@@ -1,0 +1,280 @@
+﻿import { useEffect, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+
+const API_URL = `${
+  import.meta.env.VITE_API_URL ?? "http://localhost:3001/api"
+}/auth`;
+
+interface Props {
+  children: ReactNode;
+}
+
+async function checkSession(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_URL}/me`, {
+      credentials: "include",
+    });
+
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function getCsrfToken(): string {
+  const cookie = document.cookie
+    .split("; ")
+    .find((item) => item.startsWith("ts_csrf="));
+
+  return cookie
+    ? decodeURIComponent(cookie.slice("ts_csrf=".length))
+    : "";
+}
+
+export function AuthGate({ children }: Props) {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    checkSession().then((result) => {
+      if (active) {
+        setAuthenticated(result);
+        setChecking(false);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setSubmitting(true);
+
+    try {
+      const response = await fetch(`${API_URL}/login`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+        }),
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          result?.message ?? `Login failed (${response.status})`,
+        );
+      }
+
+      setPassword("");
+      setAuthenticated(true);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "تعذر الاتصال بالخادم.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleLogout() {
+    setError("");
+    setLoggingOut(true);
+
+    try {
+      const csrfToken = getCsrfToken();
+
+      if (!csrfToken) {
+        throw new Error(
+          "رمز الحماية غير موجود. حدّث الصفحة وحاول تسجيل الخروج مرة أخرى.",
+        );
+      }
+
+      const response = await fetch(`${API_URL}/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          result?.message ?? `Logout failed (${response.status})`,
+        );
+      }
+
+      setPassword("");
+      setAuthenticated(false);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "تعذر تسجيل الخروج. حاول مرة أخرى.",
+      );
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
+  if (checking) {
+    return (
+      <main dir="rtl" style={pageStyle}>
+        <p>جارٍ التحقق من جلسة تسجيل الدخول...</p>
+      </main>
+    );
+  }
+
+  if (authenticated) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          style={logoutButtonStyle}
+        >
+          {loggingOut ? "جارٍ تسجيل الخروج..." : "تسجيل الخروج"}
+        </button>
+
+        {error && (
+          <div role="alert" style={logoutErrorStyle}>
+            {error}
+          </div>
+        )}
+
+        {children}
+      </>
+    );
+  }
+
+  return (
+    <main dir="rtl" style={pageStyle}>
+      <form onSubmit={handleLogin} style={formStyle}>
+        <h1 style={{ marginTop: 0 }}>تسجيل الدخول</h1>
+        <p style={{ color: "#94a3b8" }}>نظام إدارة التأمين</p>
+
+        <label htmlFor="login-email">البريد الإلكتروني</label>
+        <input
+          id="login-email"
+          type="email"
+          autoComplete="username"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          required
+          style={inputStyle}
+        />
+
+        <label htmlFor="login-password">كلمة المرور</label>
+        <input
+          id="login-password"
+          type="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          required
+          style={inputStyle}
+        />
+
+        {error && (
+          <p role="alert" style={{ color: "#fb7185" }}>
+            {error}
+          </p>
+        )}
+
+        <button type="submit" disabled={submitting} style={buttonStyle}>
+          {submitting ? "جارٍ تسجيل الدخول..." : "دخول"}
+        </button>
+      </form>
+    </main>
+  );
+}
+
+const pageStyle = {
+  minHeight: "100vh",
+  display: "grid",
+  placeItems: "center",
+  padding: 20,
+  boxSizing: "border-box" as const,
+  background: "#0b1120",
+  color: "#f1f5f9",
+  fontFamily: "Arial, sans-serif",
+};
+
+const formStyle = {
+  width: "100%",
+  maxWidth: 400,
+  boxSizing: "border-box" as const,
+  padding: 28,
+  border: "1px solid #263449",
+  borderRadius: 16,
+  background: "#111c2e",
+};
+
+const inputStyle = {
+  display: "block",
+  width: "100%",
+  boxSizing: "border-box" as const,
+  padding: 12,
+  margin: "8px 0 18px",
+  border: "1px solid #334155",
+  borderRadius: 8,
+  background: "#0b1120",
+  color: "#f1f5f9",
+};
+
+const buttonStyle = {
+  width: "100%",
+  padding: 12,
+  marginTop: 12,
+  border: 0,
+  borderRadius: 8,
+  background: "#06b6d4",
+  color: "#082f49",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const logoutButtonStyle = {
+  position: "fixed" as const,
+  top: 12,
+  left: 12,
+  zIndex: 1000,
+  padding: "10px 16px",
+  border: "1px solid #475569",
+  borderRadius: 8,
+  background: "#1e293b",
+  color: "#f1f5f9",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const logoutErrorStyle = {
+  position: "fixed" as const,
+  top: 60,
+  left: 12,
+  zIndex: 1000,
+  maxWidth: 320,
+  padding: 12,
+  borderRadius: 8,
+  background: "#7f1d1d",
+  color: "#fff",
+};

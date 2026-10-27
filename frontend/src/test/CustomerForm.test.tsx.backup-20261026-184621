@@ -1,0 +1,114 @@
+﻿import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
+import { CustomerForm } from '../components/customers/CustomerForm'
+import type { CustomerInput } from '../services/customer-api'
+
+const emptyForm: CustomerInput = {
+  firstName: '',
+  lastName: '',
+  email: null,
+  phoneNumber: null,
+  dateOfBirth: null,
+}
+
+function renderForm(overrides: Partial<Parameters<typeof CustomerForm>[0]> = {}) {
+  const props = {
+    form: emptyForm,
+    editingId: null,
+    saving: false,
+    onFieldChange: vi.fn(),
+    onSubmit: vi.fn().mockResolvedValue(undefined),
+    onReset: vi.fn(),
+    ...overrides,
+  }
+
+  return {
+    ...render(<CustomerForm {...props} />),
+    props,
+  }
+}
+
+describe('CustomerForm', () => {
+  it('renders the customer fields', () => {
+    renderForm()
+
+    expect(screen.getByPlaceholderText('name@example.com')).toBeInTheDocument()
+    expect(document.querySelector('input[required]')).toBeInTheDocument()
+    expect(document.querySelector('input[type="tel"]')).toBeInTheDocument()
+    expect(document.querySelector('input[type="date"]')).toBeInTheDocument()
+  })
+
+  it('calls onFieldChange when a field changes', async () => {
+    const user = userEvent.setup()
+    const { props } = renderForm()
+
+    const firstNameInput = document.querySelectorAll('input')[0]
+    await user.type(firstNameInput, 'Mohamed')
+
+    expect(props.onFieldChange).toHaveBeenCalledWith('firstName', 'M')
+    expect(props.onFieldChange).toHaveBeenLastCalledWith('firstName', 'Mohamed')
+  })
+
+  it('submits the current form data', async () => {
+    const user = userEvent.setup()
+    const form: CustomerInput = {
+      firstName: 'Mohamed',
+      lastName: 'Hussein',
+      email: 'mohamed@example.com',
+      phoneNumber: '01000000000',
+      dateOfBirth: '2002-03-16',
+    }
+
+    const { props } = renderForm({ form })
+
+    await user.click(screen.getByRole('button', { name: /إضافة العميل|Ø¥Ø¶Ø§Ù/ }))
+
+    await waitFor(() => {
+      expect(props.onSubmit).toHaveBeenCalledWith(form)
+    })
+  })
+
+  it('disables submit while saving', () => {
+    renderForm({ saving: true })
+
+    expect(screen.getByRole('button', { name: /Ø¬Ø§Ø±Ù/ })).toBeDisabled()
+  })
+
+  it('shows the edit cancel button and calls onReset', async () => {
+    const user = userEvent.setup()
+    const { props } = renderForm({ editingId: '101' })
+
+    const cancelButton = screen.getByRole('button', {
+      name: /Ø¥Ù„ØºØ§Ø¡ Ø§Ù„ØªØ¹Ø¯ÙŠÙ„/,
+    })
+
+    await user.click(cancelButton)
+
+    expect(props.onReset).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onReset when the clear button is clicked', async () => {
+    const user = userEvent.setup()
+    const { props } = renderForm()
+
+    await user.click(screen.getByRole('button', {
+      name: /Ù…Ø³Ø­ Ø§Ù„Ø­Ù‚ÙˆÙ„/,
+    }))
+
+    expect(props.onReset).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not submit when required fields are empty', () => {
+    const { props } = renderForm()
+    const formElement = document.querySelector('form')
+
+    expect(formElement).not.toBeNull()
+
+    if (formElement) {
+      fireEvent.submit(formElement)
+    }
+
+    expect(props.onSubmit).not.toHaveBeenCalled()
+  })
+})
