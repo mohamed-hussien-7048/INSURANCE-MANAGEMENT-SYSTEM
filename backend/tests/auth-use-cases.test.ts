@@ -1,0 +1,266 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { AppError } from "../src/shared/errors/app-error.js";
+import type {
+  AuthUser,
+  UserRole,
+  UserStatus,
+} from "../src/modules/auth/domain/auth.types.js";
+import type {
+  AuthRepository,
+  StoredAuthSession,
+  StoredAuthUser,
+} from "../src/modules/auth/repositories/auth.repository.interface.js";
+import { AuthUseCases } from "../src/modules/auth/application/auth.use-cases.js";
+import { PasswordService } from "../src/modules/auth/services/password.service.js";
+import { SessionTokenService } from "../src/modules/auth/services/session-token.service.js";
+
+class FakeAuthRepository implements AuthRepository {
+  user: StoredAuthUser | null = null;
+  createdUser: AuthUser | null = null;
+  savedTokenHash: string | null = null;
+  revokedTokenHash: string | null = null;
+  failedAttempts = 0;
+  lockedUntil: Date | null = null;
+
+  async findUserByEmail(): Promise<StoredAuthUser | null> {
+    return this.user;
+  }
+
+  async createPendingUser(input: {
+    email: string;
+    normalizedEmail: string;
+    passwordHash: string;
+    displayName: string;
+  }): Promise<AuthUser> {
+    const user: AuthUser = {
+      userId: "10",
+      email: input.email,
+      displayName: input.displayName,
+      role: "Employee",
+      status: "Pending",
+    };
+
+    this.createdUser = user;
+    return user;
+  }
+
+  async recordSuccessfulLogin(): Promise<void> {
+    this.failedAttempts = 0;
+    this.lockedUntil = null;
+  }
+
+  async recordFailedLogin(
+    _userId: string,
+    failedAttempts: number,
+    lockedUntil: Date | null,
+  ): Promise<void> {
+    this.failedAttempts = failedAttempts;
+    this.lockedUntil = lockedUntil;
+
+    if (this.user) {
+      this.user.failedLoginAttempts = failedAttempts;
+      this.user.lockedUntil = lockedUntil;
+    }
+  }
+
+  async createSession(
+    _userId: string,
+    tokenHash: string,
+  ): Promise<void> {
+    this.savedTokenHash = tokenHash;
+  }
+
+  async findActiveSessionByHash(): Promise<StoredAuthSession | null> {
+    if (!this.user || !this.savedTokenHash) {
+      return null;
+    }
+
+    return {
+      sessionId: "session-1",
+      user: {
+        userId: this.user.userId,
+        email: this.user.email,
+        displayName: this.user.displayName,
+        role: this.user.role,
+        status: this.user.status,
+      },
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+  }
+
+  async revokeSession(tokenHash: string): Promise<void> {
+    this.revokedTokenHash = tokenHash;
+  }
+}
+
+function createActiveUser(
+  overrides: Partial<StoredAuthUser> = {},
+): StoredAuthUser {
+  return {
+    userId: "10",
+    email: "employee@example.com",
+    normalizedEmail: "employee@example.com",
+    passwordHash: "hashed:test-password",
+    displayName: "Test Employee",
+    role: "Employee" as UserRole,
+    status: "Active" as UserStatus,
+    failedLoginAttempts: 0,
+    lockedUntil: null,
+    ...overrides,
+  };
+}
+
+function createSubject(repository: FakeAuthRepository) {
+  const passwordService = {
+    hash: async (password: string) => `hashed:${password}`,
+    verify: async (password: string, hash: string) =>
+      hash === `hashed:${password}`,
+  } as PasswordService;
+
+  return new AuthUseCases(
+    repository,
+    passwordService,
+    new SessionTokenService(),
+  );
+}
+
+test("registration creates a Pending Employee account", async () => {
+  const repository = new FakeAuthRepository();
+  const subject = createSubject(repository);
+
+  const user = await subject.register({
+    displayName: "  Test Employee  ",
+    email: " Test@Example.com ",
+    password: "a-long-test-password",
+  });
+
+  assert.equal(user.status, "Pending");
+  assert.equal(user.role, "Employee");
+  assert.equal(user.displayName, "Test Employee");
+  assert.equal(repository.createdUser?.email, "Test@Example.com");
+});
+
+test("registration rejects an existing email", async () => {
+  const repository = new FakeAuthRepository();
+  repository.user = createActiveUser();
+  const subject = createSubject(repository);
+
+  await assert.rejects(
+    subject.register({
+      displayName: "Another User",
+      email: "employee@example.com",
+      password: "a-long-test-password",
+    }),
+    (error: unknown) =>
+      error instanceof AppError && error.statusCode === 409,
+  );
+});
+
+test("login rejects an unknown email", async () => {
+  const subject = createSubject(new FakeAuthRepository());
+
+  await assert.rejects(
+    subject.login({
+      email: "missing@example.com",
+      password: "wrong-password",
+    }),
+    (error: unknown) =>
+      error instanceof AppError && error.statusCode === 401,
+  );
+});
+
+test("login rejects Pending accounts", async () => {
+  const repository = new FakeAuthRepository();
+  repository.user = createActiveUser({ status: "Pending" });
+  const subject = createSubject(repository);
+
+  await assert.rejects(
+    subject.login({
+      email: "employee@example.com",
+      password: "test-password",
+    }),
+    (error: unknown) =>
+      error instanceof AppError && error.statusCode === 403,
+  );
+});
+
+test("login records a failed password attempt", async () => {
+  const repository = new FakeAuthRepository();
+  repository.user = createActiveUser();
+  const subject = createSubject(repository);
+
+  await assert.rejects(
+    subject.login({
+      email: "employee@example.com",
+      password: "wrong-password",
+    }),
+    (error: unknown) =>
+      error instanceof AppError && error.statusCode === 401,
+  );
+
+  assert.equal(repository.failedAttempts, 1);
+});
+
+test("login locks the account after five failed attempts", async () => {
+  const repository = new FakeAuthRepository();
+  repository.user = createActiveUser();
+  const subject = createSubject(repository);
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await assert.rejects(
+      subject.login({
+        email: "employee@example.com",
+        password: "wrong-password",
+      }),
+      (error: unknown) => error instanceof AppError,
+    );
+  }
+
+  assert.equal(repository.failedAttempts, 5);
+  assert.ok(repository.lockedUntil instanceof Date);
+  assert.ok(repository.lockedUntil.getTime() > Date.now());
+
+  await assert.rejects(
+    subject.login({
+      email: "employee@example.com",
+      password: "test-password",
+    }),
+    (error: unknown) =>
+      error instanceof AppError && error.statusCode === 429,
+  );
+});
+test("login creates a session using a hashed random token", async () => {
+  const repository = new FakeAuthRepository();
+  repository.user = createActiveUser();
+  const subject = createSubject(repository);
+
+  const session = await subject.login({
+    email: "employee@example.com",
+    password: "test-password",
+  });
+
+  assert.equal(session.user.userId, "10");
+  assert.ok(session.sessionToken.length >= 32);
+  assert.notEqual(
+    repository.savedTokenHash,
+    session.sessionToken,
+  );
+});
+
+test("logout revokes the session token hash", async () => {
+  const repository = new FakeAuthRepository();
+  const subject = createSubject(repository);
+  const token = "sample-session-token";
+
+  await subject.logout(token);
+
+  assert.equal(
+    repository.revokedTokenHash,
+    new SessionTokenService().hash(token),
+  );
+});
+
+
+
+
